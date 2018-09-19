@@ -34,10 +34,6 @@ def create_blueprint(state):
     @blueprint.route('/<path:schema_path>')
     def get_schema(schema_path):
         """Retrieve a schema."""
-        try:
-            schema_dir = state.get_schema_dir(schema_path)
-        except JSONSchemaNotFound:
-            abort(404)
 
         resolved = request.args.get(
             'resolved',

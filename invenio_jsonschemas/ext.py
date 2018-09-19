@@ -113,19 +113,16 @@ class InvenioJSONSchemasState(object):
             was found in the specified path.
         :returns: The schema in a dictionary form.
         """
-        if path not in self.schemas:
-            raise JSONSchemaNotFound(path)
-        with open(os.path.join(self.schemas[path], path)) as file_:
-            schema = json.load(file_)
-            if with_refs:
-                schema = JsonRef.replace_refs(
-                    schema,
-                    base_uri=request.base_url,
-                    loader=self.loader_cls() if self.loader_cls else None,
-                )
-            if resolved:
-                schema = self.resolver_cls(schema)
-            return schema
+        schema = self.loader_cls()(self.path_to_url(path))
+        if with_refs:
+            schema = JsonRef.replace_refs(
+                schema,
+                base_uri=request.base_url,
+                loader=self.loader_cls() if self.loader_cls else None,
+            )
+        if resolved:
+            schema = self.resolver_cls(schema)
+        return schema
 
     def list_schemas(self):
         """List all JSON-schema names.
@@ -156,8 +153,6 @@ class InvenioJSONSchemasState(object):
         :param path: relative path of the schema.
         :returns: The schema complete URL or ``None`` if not found.
         """
-        if path not in self.schemas:
-            return None
         return self.url_map.bind(
             self.app.config['JSONSCHEMAS_HOST'],
             url_scheme=self.app.config['JSONSCHEMAS_URL_SCHEME']
