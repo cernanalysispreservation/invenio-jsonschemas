@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 
 import importlib_metadata
 import six
-from flask import request
+from flask import request, abort
 from jsonref import JsonRef
 from six.moves.urllib.parse import urlsplit
 from werkzeug.exceptions import HTTPException
@@ -118,7 +118,11 @@ class InvenioJSONSchemasState(object):
             was found in the specified path.
         :returns: The schema in a dictionary form.
         """
-        schema = self.loader_cls()(self.path_to_url(path))
+        try:
+            schema = self.loader_cls()(self.path_to_url(path))
+        except JSONSchemaNotFound:
+            abort(404)
+
         if with_refs:
             schema = JsonRef.replace_refs(
                 schema,
