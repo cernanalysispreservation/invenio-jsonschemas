@@ -15,7 +15,7 @@ import os
 
 from flask import Blueprint, abort, current_app, jsonify, request, \
     send_from_directory
-from jsonref import JsonRef
+from jsonref import JsonRef, JsonRefError
 
 from .errors import JSONSchemaNotFound
 
@@ -47,14 +47,28 @@ def create_blueprint(state):
             type=int
         ) or resolved
 
-        if resolved or with_refs:
-            schema = state.get_schema(
-                schema_path,
-                with_refs=with_refs,
-                resolved=resolved
-            )
-            return jsonify(schema)
-        else:
-            return send_from_directory(schema_dir, schema_path)
+        schema = state.get_schema(
+            schema_path,
+            with_refs=with_refs,
+            resolved=resolved
+        )
+
+        try:
+            schema = jsonify(schema)
+        except JsonRefError:
+            abort(404)
+        return schema
+        # return jsonify(schema)
+
+        # if resolved or with_refs:
+        #     schema = state.get_schema(
+        #         schema_path,
+        #         with_refs=with_refs,
+        #         resolved=resolved
+        #     )
+        #     return jsonify(schema)
+        # else:
+        #     return jsonify(schema)
+        #     # return send_from_directory(schema_dir, schema_path)
 
     return blueprint
