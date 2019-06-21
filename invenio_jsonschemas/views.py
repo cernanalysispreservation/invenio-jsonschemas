@@ -10,14 +10,8 @@
 
 from __future__ import absolute_import, print_function
 
-import json
-import os
-
-from flask import Blueprint, abort, current_app, jsonify, request, \
-    send_from_directory
-from jsonref import JsonRef, JsonRefError
-
-from .errors import JSONSchemaNotFound
+from flask import Blueprint, abort, current_app, jsonify, request
+from jsonref import JsonRefError
 
 
 def create_blueprint(state):
@@ -34,7 +28,6 @@ def create_blueprint(state):
     @blueprint.route('/<path:schema_path>')
     def get_schema(schema_path):
         """Retrieve a schema."""
-
         resolved = request.args.get(
             'resolved',
             current_app.config.get('JSONSCHEMAS_RESOLVE_SCHEMA'),
@@ -58,17 +51,5 @@ def create_blueprint(state):
         except JsonRefError:
             abort(404)
         return schema
-        # return jsonify(schema)
-
-        # if resolved or with_refs:
-        #     schema = state.get_schema(
-        #         schema_path,
-        #         with_refs=with_refs,
-        #         resolved=resolved
-        #     )
-        #     return jsonify(schema)
-        # else:
-        #     return jsonify(schema)
-        #     # return send_from_directory(schema_dir, schema_path)
 
     return blueprint

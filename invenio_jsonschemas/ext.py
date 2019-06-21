@@ -15,7 +15,8 @@ import os
 
 import pkg_resources
 import six
-from flask import request, abort
+from flask import abort, request
+from flask_login import current_user
 from jsonref import JsonRef
 from six.moves.urllib.parse import urlsplit
 from werkzeug.exceptions import HTTPException
@@ -41,67 +42,12 @@ class InvenioJSONSchemasState(object):
         :param app: application registering this state
         """
         self.app = app
-        self.schemas = {}
         self.url_map = Map([Rule(
             '{0}/<path:path>'.format(self.app.config['JSONSCHEMAS_ENDPOINT']),
             endpoint='schema',
             host=self.app.config['JSONSCHEMAS_HOST'],
         )], host_matching=True)
 
-    def register_schemas_dir(self, directory):
-        """Recursively register all json-schemas in a directory.
-
-        :param directory: directory path.
-        """
-        for root, dirs, files in os.walk(directory):
-            dir_path = os.path.relpath(root, directory)
-            if dir_path == '.':
-                dir_path = ''
-            for file_ in files:
-                if file_.lower().endswith(('.json')):
-                    schema_name = os.path.join(dir_path, file_)
-                    if schema_name in self.schemas:
-                        raise JSONSchemaDuplicate(
-                            schema_name,
-                            self.schemas[schema_name],
-                            directory
-                        )
-                    self.schemas[schema_name] = os.path.abspath(directory)
-
-    def register_schema(self, directory, path):
-        """Register a json-schema.
-
-        :param directory: root directory path.
-        :param path: schema path, relative to the root directory.
-        """
-        self.schemas[path] = os.path.abspath(directory)
-
-    def get_schema_dir(self, path):
-        """Retrieve the directory containing the given schema.
-
-        :param path: Schema path, relative to the directory where it was
-            registered.
-        :raises invenio_jsonschemas.errors.JSONSchemaNotFound: If no schema
-            was found in the specified path.
-        :returns: The schema directory.
-        """
-        if path not in self.schemas:
-            raise JSONSchemaNotFound(path)
-        return self.schemas[path]
-
-    def get_schema_path(self, path):
-        """Compute the schema's absolute path from a schema relative path.
-
-        :param path: relative path of the schema.
-        :raises invenio_jsonschemas.errors.JSONSchemaNotFound: If no schema
-            was found in the specified path.
-        :returns: The absolute path.
-        """
-        if path not in self.schemas:
-            raise JSONSchemaNotFound(path)
-        return os.path.join(self.schemas[path], path)
-
-    @lru_cache(maxsize=1000)
     def get_schema(self, path, with_refs=False, resolved=False):
         """Retrieve a schema.
 
@@ -113,28 +59,34 @@ class InvenioJSONSchemasState(object):
             was found in the specified path.
         :returns: The schema in a dictionary form.
         """
-        try:
-            schema = self.loader_cls()(self.path_to_url(path))
-        except JSONSchemaNotFound:
-            abort(404)
 
-        if with_refs:
-            schema = JsonRef.replace_refs(
-                schema,
-                base_uri=request.base_url,
-                loader=self.loader_cls() if self.loader_cls else None,
-            )
-        if resolved:
-            schema = self.resolver_cls(schema)
-        return schema
+        @lru_cache(maxsize=1000)
+        def wrapped(self, path, with_refs, resolved, user):
+            """Wrapper for method to memoize results based on extra parameter: current_user."""
+            try:
+                schema = self.loader_cls()(self.path_to_url(path))
+            except JSONSchemaNotFound:
+                abort(404)
+
+            if with_refs:
+                schema = JsonRef.replace_refs(
+                    schema,
+                    base_uri=request.base_url,
+                    loader=self.loader_cls() if self.loader_cls else None,
+                )
+            if resolved:
+                schema = self.resolver_cls(schema)
+            return schema
+
+        return wrapped(self, path, with_refs, resolved, current_user)
 
     def list_schemas(self):
-        """List all JSON-schema names.
+        """Deprecated.
 
         :returns: list of schema names.
         :rtype: list
         """
-        return self.schemas.keys()
+        return []
 
     def url_to_path(self, url):
         """Convert schema URL to path.
@@ -146,7 +98,7 @@ class InvenioJSONSchemasState(object):
         try:
             loader, args = self.url_map.bind(parts.netloc).match(parts.path)
             path = args.get('path')
-            if loader == 'schema' and path in self.schemas:
+            if loader == 'schema':
                 return path
         except HTTPException:
             return None
@@ -220,13 +172,6 @@ class InvenioJSONSchemas(object):
                 else 'invenio_jsonschemas.schemas'
 
         state = InvenioJSONSchemasState(app)
-
-        # Load the json-schemas from extension points.
-        if entry_point_group:
-            for base_entry in pkg_resources.iter_entry_points(
-                    entry_point_group):
-                directory = os.path.dirname(base_entry.load().__file__)
-                state.register_schemas_dir(directory)
 
         # Init blueprints
         _register_blueprint = app.config.get(register_config_blueprint)
