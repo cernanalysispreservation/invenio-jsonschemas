@@ -17,7 +17,7 @@ import pkg_resources
 import six
 from flask import abort, request
 from flask_login import current_user
-from jsonref import JsonRef
+from jsonref import JsonRef, JsonRefError
 from six.moves.urllib.parse import urlsplit
 from werkzeug.exceptions import HTTPException
 from werkzeug.routing import Map, Rule
@@ -59,24 +59,23 @@ class InvenioJSONSchemasState(object):
             was found in the specified path.
         :returns: The schema in a dictionary form.
         """
-
         @lru_cache(maxsize=1000)
         def wrapped(self, path, with_refs, resolved, user):
             """Wrapper for method to memoize results based on extra parameter: current_user."""
             try:
                 schema = self.loader_cls()(self.path_to_url(path))
-            except JSONSchemaNotFound:
-                abort(404)
 
-            if with_refs:
-                schema = JsonRef.replace_refs(
-                    schema,
-                    base_uri=request.base_url,
-                    loader=self.loader_cls() if self.loader_cls else None,
-                )
-            if resolved:
-                schema = self.resolver_cls(schema)
-            return schema
+                if with_refs:
+                    schema = JsonRef.replace_refs(
+                        schema,
+                        base_uri=request.base_url,
+                        loader=self.loader_cls() if self.loader_cls else None,
+                    )
+                if resolved:
+                    schema = self.resolver_cls(schema)
+                return schema
+            except (JSONSchemaNotFound, JsonRefError):
+                abort(404)
 
         return wrapped(self, path, with_refs, resolved, current_user)
 
