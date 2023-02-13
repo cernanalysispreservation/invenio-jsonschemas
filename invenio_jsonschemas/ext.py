@@ -17,7 +17,8 @@ import pkg_resources
 import six
 from flask import abort, request
 from flask_login import current_user
-from jsonref import JsonRef, JsonRefError
+from jsonref import JsonRefError
+from jsonref import replace_refs
 from six.moves.urllib.parse import urlsplit
 from werkzeug.exceptions import HTTPException
 from werkzeug.routing import Map, Rule
@@ -66,10 +67,11 @@ class InvenioJSONSchemasState(object):
                 schema = self.loader_cls()(self.path_to_url(path))
 
                 if with_refs:
-                    schema = JsonRef.replace_refs(
+                    schema = replace_refs(
                         schema,
                         base_uri=request.base_url,
                         loader=self.loader_cls() if self.loader_cls else None,
+                        proxies=False,
                     )
                 if resolved:
                     schema = self.resolver_cls(schema)
